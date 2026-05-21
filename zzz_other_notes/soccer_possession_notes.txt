@@ -1,0 +1,390 @@
+Football Pose & Movement Analysis (Attacking players with ball possession)
+
+Steps:
+- game videos - format : ???
+- pose extraction
+- feature engineering
+- ML
+
+Paper/reference direction:
+- Pose estimation in sports
+	human pose estimation sports analytics
+	football pose estimation
+	soccer action recognition posse
+	pose-based action recognition
+- spatiotemporal action recognition
+	skeleton-based action recognition
+	spatiotemporal transformer pose
+	ST-GCN - Spatio-Temporal Graph Convolutional Networks -> GNN
+- Sports analytics papers
+	StatsBomb research
+	MIT Sloan Sports Analytics
+	soccer analytics conference papers
+
+
+
+
+PROJECT PIPELINE
+================
+
+GOAL:
+Predict future body-relative attacker motion / pose / ball-relative movement
+from past broadcast football footage.
+
+
+--------------------------------------------------
+1. DATA COLLECTION
+--------------------------------------------------
+
+- Collect football dribbling / carry / 1v1 clips
+- Prefer:
+    - real-speed footage
+    - similar camera style
+    - attacker-centered clips
+- Avoid:
+    - heavy slow motion
+    - extreme camera cuts
+    - occluded players
+
+Suggested amount:
+    150–500 clips initially
+
+
+--------------------------------------------------
+2. CLIP LABELING / METADATA
+--------------------------------------------------
+
+For each clip:
+    - attacker identity
+    - clip start/end
+    - optional action label:
+        dribble / carry / cut / pass / shot
+
+Optional:
+    dominant foot
+    player role
+    left/right attack direction
+
+
+--------------------------------------------------
+3. POSE EXTRACTION
+--------------------------------------------------
+
+Use:
+    - YOLO Pose
+    - MediaPipe Pose
+    - OpenPose
+    - ViTPose
+
+Extract keypoints per frame:
+    shoulders
+    hips
+    knees
+    ankles
+    elbows
+    feet
+    etc.
+
+Frame rate:
+    ~15 fps is reasonable
+
+
+--------------------------------------------------
+4. BALL EXTRACTION
+--------------------------------------------------
+
+Detect or label soccer ball position:
+    (x_ball, y_ball)
+
+Methods:
+    - manual labeling
+    - YOLO ball detector
+    - semi-manual correction
+
+
+--------------------------------------------------
+5. NORMALIZATION
+--------------------------------------------------
+
+Goal:
+remove camera movement / zoom effects
+
+Use:
+    hip center as origin
+
+Example:
+    p'_i = p_i - p_hipcenter
+
+Scale by:
+    body height
+    shoulder width
+    torso length
+
+Example:
+    p''_i = (p_i - p_hipcenter) / body_scale
+
+Optional:
+    rotate coordinates into body frame
+
+
+--------------------------------------------------
+6. FEATURE ENGINEERING
+--------------------------------------------------
+
+Compute:
+    - shoulder orientation
+    - hip orientation
+    - torso angle
+    - angular velocity (omega)
+    - pose change between frames
+    - ball-relative position
+    - ball-foot distance
+    - body-motion alignment
+    - limb angle changes
+
+Example:
+    omega = delta(theta)/delta(t)
+
+Possible representations:
+    pose graph
+    normalized keypoints
+    temporal pose sequence
+
+
+--------------------------------------------------
+7. DATASET CONSTRUCTION
+--------------------------------------------------
+
+Example:
+    past 30 frames -> next 5 or 15 frames
+
+Input:
+    pose/features from frames t-29 ... t
+
+Output:
+    future pose/features from frames t+1 ... t+k
+
+Representation:
+    vectors / tensors
+
+
+--------------------------------------------------
+8. MODEL TRAINING
+--------------------------------------------------
+
+Start simple:
+    - linear baseline
+    - constant-angle baseline
+    - MLP
+    - LSTM
+    - GRU
+
+Later:
+    - Temporal CNN
+    - Transformer
+    - ST-GCN
+    - Graph Neural Networks
+
+
+--------------------------------------------------
+9. EVALUATION
+--------------------------------------------------
+
+Do NOT use only classification accuracy.
+
+Use:
+    - MSE
+    - MAE
+    - angle prediction error
+    - keypoint displacement error
+    - trajectory deviation
+    - future pose similarity
+
+Compare against:
+    - constant motion baseline
+    - no-motion baseline
+
+
+--------------------------------------------------
+10. EXTENSIONS
+--------------------------------------------------
+
+Later additions:
+    - nearest defender
+    - pressure
+    - teammate spacing
+    - multi-player interaction
+    - tactical context
+    - full trajectory prediction
+
+
+
+
+RESEARCH PAPER AREAS / KEYWORDS
+===============================
+
+--------------------------------------------------
+A. FOOTBALL / SPORTS ANALYTICS
+--------------------------------------------------
+
+Purpose:
+football-specific tasks and datasets
+
+Search:
+    soccer action prediction
+    soccer action anticipation
+    football video understanding
+    soccernet
+    football player tracking
+    soccer analytics machine learning
+    ball carrier prediction
+
+Important:
+    SoccerNet papers
+    sports analytics conference papers
+    MIT Sloan Sports Analytics
+
+
+--------------------------------------------------
+B. POSE ESTIMATION
+--------------------------------------------------
+
+Purpose:
+extract skeleton/keypoints from video
+
+Search:
+    human pose estimation
+    sports pose estimation
+    football pose estimation
+    YOLO Pose
+    MediaPipe Pose
+    OpenPose
+    ViTPose
+
+Topics:
+    2D pose estimation
+    monocular pose estimation
+    sports pose tracking
+
+
+--------------------------------------------------
+C. SKELETON-BASED ACTION RECOGNITION
+--------------------------------------------------
+
+Purpose:
+pose sequence -> action / motion understanding
+
+Search:
+    skeleton action recognition
+    pose sequence learning
+    skeleton temporal modeling
+    ST-GCN
+    spatiotemporal graph convolution
+    pose transformer
+
+Important:
+    ST-GCN
+    ST-TR
+    graph neural network pose models
+
+
+--------------------------------------------------
+D. HUMAN MOTION FORECASTING
+--------------------------------------------------
+
+Purpose:
+predict future human movement
+
+Search:
+    human motion prediction
+    human motion forecasting
+    pose forecasting
+    future pose prediction
+    trajectory forecasting
+    sequence-to-sequence motion prediction
+
+Important concepts:
+    uncertainty
+    multimodal futures
+    temporal prediction
+
+
+--------------------------------------------------
+E. TRAJECTORY PREDICTION
+--------------------------------------------------
+
+Purpose:
+future path estimation
+
+Search:
+    trajectory prediction
+    pedestrian trajectory forecasting
+    trajectory transformer
+    social GAN trajectory prediction
+    sports trajectory prediction
+
+Important concepts:
+    interaction-aware prediction
+    sequence prediction
+    future path modeling
+
+
+--------------------------------------------------
+F. VIEW / CAMERA INVARIANCE
+--------------------------------------------------
+
+Purpose:
+handle changing broadcast camera angles
+
+Search:
+    view invariant action recognition
+    camera invariant pose representation
+    egocentric action recognition
+    monocular sports analysis
+
+Topics:
+    normalization
+    body-relative coordinates
+    pose invariance
+
+
+--------------------------------------------------
+G. TEMPORAL MODELING
+--------------------------------------------------
+
+Purpose:
+learning motion across time
+
+Search:
+    temporal sequence learning
+    LSTM action recognition
+    temporal transformer
+    temporal convolutional network
+    sequence modeling pose
+
+Models:
+    LSTM
+    GRU
+    Transformer
+    TCN
+
+
+--------------------------------------------------
+H. BALL / PLAYER INTERACTION
+--------------------------------------------------
+
+Purpose:
+football-specific embodied interaction
+
+Search:
+    ball-player interaction modeling
+    dribble prediction
+    football movement representation
+    embodied sports intelligence
+    action anticipation football
+
+Potential topics:
+    ball-relative motion
+    body orientation
+    deception
+    dribble intent
