@@ -1,0 +1,25 @@
+# Videos
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Outputs
+runs/
+outputs/
+
+# Dataset
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Model weights
+*.pt
+
+# VSCode
+.vscode/
