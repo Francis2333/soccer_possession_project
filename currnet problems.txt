@@ -1,0 +1,15 @@
+script/possession_player_picking -> outputs/possession_crops:
+- ball detection is not stable
+- player selection is not accurate (miss tracking, may be fixed by fine tuning, but a better ball-tracking model may solve the problem better)
+- logic in determining possession for long passes (where ball goes through opponents, absolute distance may cause error, ball trajectory may be used? or stronger momentum of possession + color recognition for same team)
+
+1. Ball detection is unstable.
+2. Player tracking IDs sometimes switch or disappear.
+3. Closest-player possession fails during passes.
+4. Current logic lacks an “in-flight ball” state.
+5. Team identity is not used, causing false switches.
+6. Crop target changes too abruptly.
+7. Pose keypoints are noisy when players are small.
+8. Replays / slow-motion / camera cuts break temporal assumptions. (manual cut)
+9. Broadcast occlusion causes missed ball/player detections.
+10. Current evaluation is qualitative; needs a small manually labeled validation set.
