@@ -1,0 +1,189 @@
+========================
+run_pipeline.py
+========================
+
+# Run full pipeline on all videos in data/
+python run_pipeline.py --input_dir "data" --device 0
+
+# Run full pipeline with Stage 1 debug video and Stage 2 possession debug videos
+python run_pipeline.py --input_dir "data" --device 0 --make_stage1_debug_video --make_debug_videos --make_full_debug_video
+
+# Run recursively through subfolders inside data/
+python run_pipeline.py --input_dir "data" --recursive --device 0 --make_debug_videos
+
+# Rerun only Stage 2 after changing possession logic
+python run_pipeline.py --input_dir "data" --skip_stage1 --make_debug_videos --make_full_debug_video
+
+# Rerun only Stage 1 detection/tracking
+python run_pipeline.py --input_dir "data" --skip_stage2 --device 0
+
+# Full pipeline with shirt color logic
+python run_pipeline.py --input_dir "data" --device 0 --use_shirt_color --make_debug_videos --make_full_debug_video
+
+# Full pipeline with custom model/settings
+python run_pipeline.py --input_dir "data" --player_model "yolo26x.pt" --ball_model "yolo26x.pt" --device 0 --player_conf 0.10 --ball_conf 0.05 --player_imgsz 1920 --ball_imgsz 1280 --make_debug_videos
+
+
+Main variables:
+--input_dir                  Folder containing original videos.
+--recursive                  Search inside subfolders too.
+--stage1_script              Path/name of Stage 1 script. Default: extract_player_ball_json.py
+--stage2_script              Path/name of Stage 2 script. Default: possession_logic_from_frame_json.py
+--json_root                  Root folder for Stage 1 JSON outputs. Default: outputs/json
+--possessions_dir            Folder for possession segment JSONs. Default: outputs/possessions
+--debug_vid_dir              Folder for Stage 2 debug videos. Default: outputs/debug_vid
+--player_model               YOLO model for player detection. Default: yolo26x.pt
+--ball_model                 YOLO model for ball detection. Default: yolo26x.pt
+--device                     GPU/CPU device. Use 0 or cuda:0 for GPU, cpu for CPU.
+--player_conf                Player confidence threshold. Default: 0.10
+--ball_conf                  Ball confidence threshold. Default: 0.05
+--player_imgsz               Player detection image size. Default: 1920
+--ball_imgsz                 Ball detection image size. Default: 1280
+--make_stage1_debug_video    Save Stage 1 player/ball debug video.
+--make_debug_videos          Save Stage 2 per-possession debug videos.
+--make_full_debug_video      Save Stage 2 full-video possession debug video.
+--use_shirt_color            Enable shirt-color same-team momentum in Stage 2.
+--skip_stage1                Skip detection/tracking and reuse existing JSONs.
+--skip_stage2                Skip possession logic.
+
+
+========================
+extract_player_ball_json.py
+========================
+
+# Basic single-video command
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --out_dir "outputs/json" --device 0
+
+# Single video with debug video
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --out_dir "outputs/json" --out_debug_video "outputs/sample_attack_1_debug_player_ball.mp4" --device 0
+
+# Single video with full settings
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --player_model "yolo26x.pt" --ball_model "yolo26x.pt" --out_dir "outputs/json" --out_debug_video "outputs/sample_attack_1_debug_player_ball.mp4" --player_conf 0.10 --ball_conf 0.05 --player_imgsz 1920 --ball_imgsz 1280 --device 0 --tracker "bytetrack.yaml" --start_frame_number_at_one
+
+# Disable debug video
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --out_dir "outputs/json" --out_debug_video "" --device 0
+
+# Process only first 300 frames for testing
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --out_dir "outputs/json" --device 0 --max_frames 300
+
+# Save every 2 frames instead of every frame
+python extract_player_ball_json.py --video "data/sample_attack_1.mp4" --out_dir "outputs/json" --device 0 --save_every_n_frames 2
+
+
+Main variables:
+--video                      Required. Path to original video.
+--player_model               YOLO model for players. Default: yolo26x.pt
+--ball_model                 YOLO model for ball. Default: yolo26x.pt
+--out_dir                    JSON output root/folder. With your change: outputs/json creates outputs/json/<video_name>/
+--out_debug_video            Debug video path. Empty string disables debug video.
+--player_conf                Player detection confidence. Default: 0.10
+--ball_conf                  Ball detection confidence. Default: 0.05
+--player_imgsz               Image size for player model. Default: 1920
+--ball_imgsz                 Image size for ball model. Default: 1280
+--device                     0, cuda:0, or cpu.
+--tracker                    Tracker config. Default: bytetrack.yaml
+--person_class_id            Person class id. Default: 0
+--person_class_name          Optional custom player class name.
+--ball_class_id              Optional custom ball class id.
+--ball_class_name            Ball class name. Default: sports ball
+--save_every_n_frames        Save every N frames. Default: 1
+--max_frames                 Stop after N frames.
+--start_frame_number_at_one  Start JSON naming at frame_000001.json instead of frame_000000.json.
+
+
+========================
+possession_logic_from_frame_json.py
+========================
+
+# Basic single-video Stage 2 command
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1"
+
+# Safer single-video command with explicit video and prefix
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1"
+
+# Single video with possession debug videos
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --make_debug_videos --make_full_debug_video
+
+# Single video with shirt color same-team momentum
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --use_shirt_color --make_debug_videos --make_full_debug_video
+
+# Ignore referee / unwanted tracks
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --ignore_track_ids "4,19" --make_debug_videos
+
+# Keep only selected player tracks
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --keep_track_ids "1,2,3,5,6,7,8,9,10,11"
+
+# More strict possession confirmation
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --min_confirm_frames 12 --min_segment_frames 12 --receiver_confirm_frames 15
+
+# More forgiving possession confirmation
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --min_confirm_frames 8 --min_segment_frames 8
+
+# Faster testing: limit debug clips
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --make_debug_videos --max_debug_videos 5
+
+# Make debug videos for all possession clips
+python possession_logic_from_frame_json.py --frames_dir "outputs/json/sample_attack_1" --video "data/sample_attack_1.mp4" --output_prefix "sample_attack_1" --make_debug_videos --max_debug_videos -1
+
+
+Main input/output variables:
+--frames_dir                 Folder containing frame_*.json and _metadata.json.
+--out_dir                    Folder for possession segment JSONs. Default: outputs/possessions
+--summary_json               Summary JSON path. Default becomes outputs/<prefix>_possessions_summary.json
+--debug_csv                  Debug CSV path. Default becomes outputs/<prefix>_possession_debug.csv
+--video                      Original video path. Needed for debug videos and shirt color.
+--output_prefix              Prefix for output files. Usually same as video name.
+--debug_vid_dir              Folder for debug videos. Default: outputs/debug_vid
+--make_debug_videos          Create per-possession debug videos.
+--make_full_debug_video      Create one full-video possession debug video.
+--max_debug_videos           Maximum debug clips. Use -1 for all.
+
+Player filtering:
+--ignore_track_ids           Comma-separated track IDs to remove, e.g. "4,19"
+--keep_track_ids             If non-empty, keep only these track IDs.
+
+Anchor:
+--anchor                     bottom_center, bbox_center, or hip_midpoint. Default: hip_midpoint
+
+Shirt color:
+--use_shirt_color            Enable shirt color sampling.
+--shirt_roi                  Fallback shirt ROI ratios. Default: 0.30,0.25,0.70,0.62
+--same_team_color_threshold  HSV color distance threshold. Default: 0.58
+--same_team_momentum_bonus   Bonus for same-team-like receiver. Default: 18.0
+--opponent_color_penalty     Penalty for different-color player. Default: 18.0
+
+Ball estimation:
+--max_missing_ball_frames    Estimate ball for short missing gaps. Default: 12
+--max_ball_speed_px_per_frame Maximum estimated ball speed. Default: 120.0
+--max_estimated_control_gap  Max estimated gap allowed for control. Default: 8
+
+Possession scoring:
+--expanded_box_ratio         Expands player box for contact test. Default: 0.35
+--contact_norm_distance      Contact threshold in player-height units. Default: 0.33
+--significant_closer_ratio   Best player distance / second distance threshold. Default: 0.50
+--max_control_norm_distance  Max control distance in player-height units. Default: 1.05
+--min_control_score          Minimum score for control. Default: 45.0
+--switch_margin              Score gap needed to switch owner. Default: 20.0
+--momentum_bonus             Bonus for previous owner. Default: 25.0
+--inside_box_bonus           Bonus when ball inside expanded bbox. Default: 45.0
+--contact_bonus              Bonus for close contact. Default: 35.0
+--velocity_direction_bonus   Bonus if ball motion points toward player. Default: 15.0
+
+Pass / receiver:
+--pass_speed_threshold       Fast ball threshold for pass state. Default: 35.0
+--pass_keep_previous_frames  Keep previous owner as CTX during pass. Default: 16
+--receive_distance           Fast-ball receiver absolute distance threshold. Default: 50.0
+--receive_norm_distance      Fast-ball receiver normalized distance. Default: 0.55
+--receiver_score_margin      Score margin needed for receiver. Default: 18.0
+--receiver_confirm_frames    Confirm frames needed for receiver. Default: 15
+
+Lower bound / stability:
+--min_confirm_frames         Lower bound for possession confirmation. Default: 10
+--max_empty_keep_frames      Keep previous owner context for short loose/uncertain gaps. Default: 12
+--min_segment_frames         Minimum segment length. Default: 10
+
+Segment / crop:
+--pre_frames                 Frames before possession segment. Default: 10
+--post_frames                Frames after possession segment. Default: 10
+--crop_pad_ratio             Crop bbox padding. Default: 0.30
+--bridge_gap_frames          Merge same-owner segments across short gaps. Default: 15
