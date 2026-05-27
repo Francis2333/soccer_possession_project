@@ -311,13 +311,13 @@ def resolve_output_paths(args: argparse.Namespace, prefix: str) -> Tuple[Path, P
     out_dir = Path(args.out_dir)
     debug_vid_dir = Path(args.debug_vid_dir)
 
-    if args.summary_json == "outputs/possessions_summary.json":
-        summary_path = Path("outputs") / f"{prefix}_possessions_summary.json"
+    if args.summary_json == "outputs/possessions/possessions_summary.json":
+        summary_path = Path("outputs") / "possessions" / prefix / f"{prefix}_possessions_summary.json"
     else:
         summary_path = Path(args.summary_json)
 
-    if args.debug_csv == "outputs/possession_debug.csv":
-        debug_csv_path = Path("outputs") / f"{prefix}_possession_debug.csv"
+    if args.debug_csv == "outputs/possessions/possessions_debug.csv":
+        debug_csv_path = Path("outputs") / "possessions" / prefix / f"{prefix}_possession_debug.csv"
     else:
         debug_csv_path = Path(args.debug_csv)
 
@@ -1406,7 +1406,10 @@ def make_debug_videos(
         print(f"[WARN] Cannot create debug videos; video does not exist: {video_path}")
         return
 
-    debug_vid_dir.mkdir(parents=True, exist_ok=True)
+    full_debug_dir = debug_vid_dir / "full_video_possession"
+    possession_debug_dir = debug_vid_dir / "possession"
+    full_debug_dir.mkdir(parents=True, exist_ok=True)
+    possession_debug_dir.mkdir(parents=True, exist_ok=True)
 
     frame_by_idx = {int(f.get("frame_idx", i)): f for i, f in enumerate(frames)}
 
@@ -1420,7 +1423,7 @@ def make_debug_videos(
     video_fps = float(cap.get(cv2.CAP_PROP_FPS) or fps or 30.0)
 
     if make_full_debug_video:
-        full_path = debug_vid_dir / f"{prefix}_full_video_possession_debug.mp4"
+        full_path = full_debug_dir / f"{prefix}_full_video_possession_debug.mp4"
         writer = cv2.VideoWriter(
             str(full_path),
             cv2.VideoWriter_fourcc(*"mp4v"),
@@ -1466,7 +1469,7 @@ def make_debug_videos(
         clip_start = int(seg["clip_start_frame"])
         clip_end = int(seg["clip_end_frame"])
 
-        out_path = debug_vid_dir / f"{prefix}_possession_{seg_id:04d}_debug.mp4"
+        out_path = possession_debug_dir / f"{prefix}_possession_{seg_id:04d}_debug.mp4"
         writer = cv2.VideoWriter(
             str(out_path),
             cv2.VideoWriter_fourcc(*"mp4v"),
@@ -1501,7 +1504,8 @@ def make_debug_videos(
         made += 1
 
     cap.release()
-    print(f"[DONE] possession debug videos: {debug_vid_dir} ({made} clips)")
+    print(f"[DONE] full-possession debug dir: {full_debug_dir}")
+    print(f"[DONE] possession debug videos: {possession_debug_dir} ({made} clips)")
 
 
 # -----------------------------
@@ -1513,8 +1517,8 @@ def main() -> None:
 
     parser.add_argument("--frames_dir", default="outputs/json", help="Directory containing frame_*.json or *_frame_*.json")
     parser.add_argument("--out_dir", default="outputs/possessions", help="Where to write possession JSON")
-    parser.add_argument("--summary_json", default="outputs/possessions_summary.json")
-    parser.add_argument("--debug_csv", default="outputs/possession_debug.csv")
+    parser.add_argument("--summary_json", default="outputs/possessions/possessions_summary.json")
+    parser.add_argument("--debug_csv", default="outputs/possessions/possessions_debug.csv")
     parser.add_argument("--video", default=None, help="Original video path. Needed for debug videos and shirt color.")
     parser.add_argument("--output_prefix", default=None, help="Prefix for generated files. Default = video filename stem.")
     parser.add_argument("--debug_vid_dir", default="outputs/debug_vid", help="Directory for debug videos.")
@@ -1625,10 +1629,11 @@ def main() -> None:
     max_gap_frames=args.bridge_gap_frames,
     )
 
-    out_dir.mkdir(parents=True, exist_ok=True)
+    video_possession_dir = out_dir / prefix
+    video_possession_dir.mkdir(parents=True, exist_ok=True)
 
     for seg in segments:
-        out_path = out_dir / f"{prefix}_possession_{seg['possession_id']:04d}.json"
+        out_path = video_possession_dir / f"{prefix}_possession_{seg['possession_id']:04d}.json"
         write_json(out_path, seg)
 
     state_counts: Dict[str, int] = {}
@@ -1639,10 +1644,15 @@ def main() -> None:
     summary = {
         "video_prefix": prefix,
         "source_frames_dir": str(frames_dir),
-        "out_dir": str(out_dir),
+        "out_dir": str(video_possession_dir),
         "num_input_frames": len(frames),
         "num_possessions": len(segments),
         "state_counts": state_counts,
+        "debug_video_dirs": {
+            "player_ball": str(Path("outputs") / "debug_vid" / "player_ball"),
+            "full_video_possession": str(debug_vid_dir / "full_video_possession"),
+            "possession": str(debug_vid_dir / "possession"),
+        },
         "settings": {
             **vars(args),
             "ignore_track_ids": sorted(list(ignore_track_ids)),
@@ -1668,7 +1678,7 @@ def main() -> None:
                 "clip_end_frame": s["clip_end_frame"],
                 "num_possession_frames": s["num_possession_frames"],
                 "num_clip_frames": s["num_clip_frames"],
-                "file": str(out_dir / f"{prefix}_possession_{s['possession_id']:04d}.json"),
+                "file": str(out_dir / prefix / f"{prefix}_possession_{s['possession_id']:04d}.json"),
             }
             for s in segments
         ],

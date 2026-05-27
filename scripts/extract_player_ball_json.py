@@ -235,7 +235,8 @@ def main() -> None:
     parser.add_argument("--ball_model", default="yolo26x.pt", help="YOLO detection model for ball.")
 
     parser.add_argument("--out_dir", default="outputs/json", help="Directory for per-frame JSON files.")
-    parser.add_argument("--out_debug_video", default="outputs/debug_player_ball/debug_player_ball.mp4")
+    parser.add_argument("--out_debug_video", default=None, help="Optional path for debug video with player IDs and ball boxes.")
+    parser.add_argument("--output_prefix", default=None, help="Prefix for output files. Default = input video filename stem.")
 
     parser.add_argument("--player_conf", type=float, default=0.10)
     parser.add_argument("--ball_conf", type=float, default=0.05)
@@ -258,10 +259,10 @@ def main() -> None:
     args = parser.parse_args()
 
     video_path = Path(args.video)
-    video_stem = video_path.stem  # example: "match_clip_01"
+    output_prefix = args.output_prefix or video_path.stem
 
-    out_root = Path(args.out_dir)
-    out_dir = out_root / video_stem
+    base_out_dir = Path(args.out_dir)
+    out_dir = base_out_dir / output_prefix
     out_dir.mkdir(parents=True, exist_ok=True)
 
     ball_class_name = args.ball_class_name
@@ -323,16 +324,19 @@ def main() -> None:
             "Run pose later on possession crops for better 17-keypoint quality.",
         ],
     }
+    metadata["output_prefix"] = output_prefix
+    # Keep generic metadata for compatibility with older scripts.
     write_json(out_dir / "_metadata.json", metadata)
 
     writer = None
+
+    if args.out_debug_video is None:
+        args.out_debug_video = str(
+            Path("outputs") / "debug_vid" / "player_ball" / f"{output_prefix}_debug_player_ball.mp4"
+        )
+
     if args.out_debug_video:
         debug_path = Path(args.out_debug_video)
-
-        # If user left default debug path, rename it based on input video
-        if str(debug_path) == "outputs/debug_player_ball/debug_player_ball.mp4":
-            debug_path = Path("outputs/debug_player_ball") / f"{video_stem}_debug_player_ball.mp4"
-
         debug_path.parent.mkdir(parents=True, exist_ok=True)
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(str(debug_path), fourcc, fps, (width, height))
