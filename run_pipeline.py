@@ -105,7 +105,7 @@ def main():
             if args.make_stage1_debug_video:
                 stage1_cmd.extend([
                     "--out_debug_video",
-                    str(Path("outputs") / f"{prefix}_debug_player_ball.mp4"),
+                    str(Path(args.debug_vid_dir) / "player_ball" / f"{prefix}_debug_player_ball.mp4"),
                 ])
             else:
                 # Empty string disables Stage 1 debug video.
@@ -114,8 +114,9 @@ def main():
             run_cmd(stage1_cmd)
 
         if not args.skip_stage2:
-            summary_json = Path("outputs") / f"{prefix}_possessions_summary.json"
-            debug_csv = Path("outputs") / f"{prefix}_possession_debug.csv"
+            video_possession_dir = Path(args.possessions_dir) / prefix
+            summary_json = video_possession_dir / f"{prefix}_possessions_summary.json"
+            debug_csv = video_possession_dir / f"{prefix}_possession_debug.csv"
 
             stage2_cmd = [
                 "python",

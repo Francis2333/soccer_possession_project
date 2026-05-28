@@ -6,6 +6,8 @@ The long-term goal is to study whether player body pose, ball position, and shor
 
 At the current stage, this is a prototype data-extraction pipeline. The focus is on building a workflow that can turn raw broadcast video into structured frame-level data and player-centered clips that can later be used for pose-based learning.
 
+Data-extraction pipeline example: https://youtu.be/E4iRdTvv-d8 
+
 ---
 
 ## Motivation

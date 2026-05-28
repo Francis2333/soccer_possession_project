@@ -8,6 +8,9 @@
 runs/
 outputs/
 
+# video generation outputs
+scripts/make_possession_videos.py
+
 # Dataset
 data/
 
