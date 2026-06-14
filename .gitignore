@@ -10,6 +10,7 @@ outputs/
 
 # video generation outputs
 scripts/make_possession_videos.py
+scripts/SoccerNet_download.py
 
 # Dataset
 data/

@@ -184,6 +184,48 @@ def parse_id_set(text: Optional[str]) -> set:
     return ids
 
 
+
+
+def frames_from_30fps_default(value_at_30fps: int, fps: float) -> int:
+    """Scale an old 30fps frame-count default to the chosen fps."""
+    return max(1, int(round(float(value_at_30fps) * float(fps) / 30.0)))
+
+
+def fill_fps_scaled_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    """
+    Keep CLI compatibility: if the user explicitly passes frame-count args, use them.
+    If omitted, scale the old 30fps defaults to args.fps.
+    """
+    frame_count_defaults_at_30fps = {
+        "max_missing_ball_frames": 12,
+        "max_estimated_control_gap": 8,
+        "pass_keep_previous_frames": 16,
+        "receiver_confirm_frames": 15,
+        "min_confirm_frames": 10,
+        "max_empty_keep_frames": 12,
+        "min_segment_frames": 10,
+        "pre_frames": 10,
+        "post_frames": 10,
+        "bridge_gap_frames": 20,
+    }
+
+    # These are px/frame thresholds. For the same real speed, lower fps means
+    # larger pixel displacement per frame, so scale by 30 / fps.
+    px_per_frame_defaults_at_30fps = {
+        "max_ball_speed_px_per_frame": 120.0,
+        "pass_speed_threshold": 35.0,
+    }
+
+    for name, old_default in frame_count_defaults_at_30fps.items():
+        if getattr(args, name) is None:
+            setattr(args, name, frames_from_30fps_default(old_default, args.fps))
+
+    for name, old_default in px_per_frame_defaults_at_30fps.items():
+        if getattr(args, name) is None:
+            setattr(args, name, float(old_default) * 30.0 / float(args.fps))
+
+    return args
+
 # -----------------------------
 # Player / ball helpers
 # -----------------------------
@@ -555,10 +597,47 @@ def estimate_ball_positions(
         frame["ball_missing_gap"] = 0
 
         if obs is not None:
-            prev_obs_idx, prev_obs_pos = last_obs_idx, last_obs_pos
-            last_obs_idx, last_obs_pos = i, obs
-            frame["ball_estimated_center"] = list(obs)
-            continue
+            if last_obs_idx is not None and last_obs_pos is not None:
+                dt = max(1, i - last_obs_idx)
+
+                # Predict where the ball should be.
+                if prev_obs_idx is not None and prev_obs_pos is not None and last_obs_idx != prev_obs_idx:
+                    prev_dt = max(1, last_obs_idx - prev_obs_idx)
+                    vx = (last_obs_pos[0] - prev_obs_pos[0]) / prev_dt
+                    vy = (last_obs_pos[1] - prev_obs_pos[1]) / prev_dt
+
+                    speed = math.hypot(vx, vy)
+                    if speed > max_speed_px_per_frame:
+                        scale = max_speed_px_per_frame / max(speed, 1e-6)
+                        vx *= scale
+                        vy *= scale
+
+                    predicted = (
+                        last_obs_pos[0] + vx * dt,
+                        last_obs_pos[1] + vy * dt,
+                    )
+                else:
+                    predicted = last_obs_pos
+
+                innovation = dist(obs, predicted)
+                max_allowed_error = max_speed_px_per_frame * dt
+
+                if innovation > max_allowed_error:
+                    frame["ball_observed_rejected"] = True
+                    frame["ball_reject_reason"] = (
+                        f"observed_ball_far_from_prediction: error={innovation:.1f}, "
+                        f"allowed={max_allowed_error:.1f}, dt={dt}"
+                    )
+                    obs = None
+                else:
+                    frame["ball_observed_rejected"] = False
+                    frame["ball_reject_reason"] = None
+
+            if obs is not None:
+                prev_obs_idx, prev_obs_pos = last_obs_idx, last_obs_pos
+                last_obs_idx, last_obs_pos = i, obs
+                frame["ball_estimated_center"] = list(obs)
+                continue
 
         if last_obs_idx is None or last_obs_pos is None:
             continue
@@ -994,13 +1073,27 @@ def assign_possession(
 # Segments
 # -----------------------------
 
-def make_crop_bbox_for_player(
+def make_square_crop_bbox_for_player(
     player: Optional[Dict[str, Any]],
     ball_center: Optional[Point],
-    pad_ratio: float,
+    square_scale: float,
     width: Optional[int],
     height: Optional[int],
 ) -> Optional[List[float]]:
+    """
+    Make a 1:1 crop box.
+
+    The square contains:
+    - player detection bbox
+    - ball center, if available
+
+    Side length:
+        square_scale * max(tight_box_width, tight_box_height)
+
+    Example:
+        square_scale=1.30 means side is at least 1.3x the longer side
+        of the tight player+ball box.
+    """
     if player is None or not player.get("bbox_xyxy"):
         return None
 
@@ -1013,7 +1106,46 @@ def make_crop_bbox_for_player(
         x2 = max(x2, bx)
         y2 = max(y2, by)
 
-    return expand_bbox([x1, y1, x2, y2], pad_ratio, width, height)
+    tight_w = max(1.0, x2 - x1)
+    tight_h = max(1.0, y2 - y1)
+    side = max(tight_w, tight_h) * float(square_scale)
+
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+
+    sx1 = cx - side / 2.0
+    sy1 = cy - side / 2.0
+    sx2 = cx + side / 2.0
+    sy2 = cy + side / 2.0
+
+    # Shift square back into frame while keeping 1:1 size if possible.
+    if width is not None:
+        if sx1 < 0:
+            sx2 -= sx1
+            sx1 = 0.0
+        if sx2 > width - 1:
+            shift = sx2 - (width - 1)
+            sx1 -= shift
+            sx2 -= shift
+
+    if height is not None:
+        if sy1 < 0:
+            sy2 -= sy1
+            sy1 = 0.0
+        if sy2 > height - 1:
+            shift = sy2 - (height - 1)
+            sy1 -= shift
+            sy2 -= shift
+
+    # If video is smaller than requested square, clamp as last resort.
+    if width is not None:
+        sx1 = clamp(sx1, 0, width - 1)
+        sx2 = clamp(sx2, 0, width - 1)
+    if height is not None:
+        sy1 = clamp(sy1, 0, height - 1)
+        sy2 = clamp(sy2, 0, height - 1)
+
+    return [float(sx1), float(sy1), float(sx2), float(sy2)]
 
 
 def build_segments(
@@ -1022,6 +1154,7 @@ def build_segments(
     pre_frames: int,
     post_frames: int,
     crop_pad_ratio: float,
+    square_crop_scale: float,
     width: Optional[int],
     height: Optional[int],
 ) -> List[Dict[str, Any]]:
@@ -1065,10 +1198,12 @@ def build_segments(
             owner_player = find_player_by_id(f, current_owner)
             ball_center = point_from_list(f.get("ball_estimated_center"))
 
-            crop_bbox = make_crop_bbox_for_player(
+            legacy_crop_bbox = None
+
+            square_crop_bbox = make_square_crop_bbox_for_player(
                 owner_player,
                 ball_center,
-                pad_ratio=crop_pad_ratio,
+                square_scale=square_crop_scale,
                 width=width,
                 height=height,
             )
@@ -1082,7 +1217,14 @@ def build_segments(
                     "frame_context_owner": context_owner,
                     "frame_controlled_owner": controlled_owner,
                     "player_bbox_xyxy": owner_player.get("bbox_xyxy") if owner_player else None,
-                    "crop_bbox_xyxy": crop_bbox,
+                    # Main crop used by later crop/pose scripts.
+                    "crop_bbox_xyxy": square_crop_bbox,
+
+                    # Explicit new square crop field.
+                    "square_crop_bbox_xyxy": square_crop_bbox,
+
+                    # Old rectangular crop kept only for comparison/backward debugging.
+                    "legacy_crop_bbox_xyxy": legacy_crop_bbox,
                     "ball_center": list(ball_center) if ball_center is not None else None,
                     "ball_is_estimated": bool(f.get("ball_is_estimated", False)),
                     "ball_speed_px_per_frame": f.get("ball_speed_px_per_frame"),
@@ -1420,7 +1562,8 @@ def make_debug_videos(
 
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    video_fps = float(cap.get(cv2.CAP_PROP_FPS) or fps or 30.0)
+    native_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    video_fps = float(fps) if fps and fps > 0 else (native_fps or 25.0)
 
     if make_full_debug_video:
         full_path = full_debug_dir / f"{prefix}_full_video_possession_debug.mp4"
@@ -1446,10 +1589,10 @@ def make_debug_videos(
             owner = fr.get("possession", {}).get("owner_track_id")
             owner_player = find_player_by_id(fr, owner)
             ball_center = point_from_list(fr.get("ball_estimated_center"))
-            crop_bbox = make_crop_bbox_for_player(
+            crop_bbox = make_square_crop_bbox_for_player(
                 owner_player,
                 ball_center,
-                pad_ratio=0.30,
+                square_scale=1.30,
                 width=width,
                 height=height,
             )
@@ -1539,9 +1682,10 @@ def main() -> None:
     parser.add_argument("--opponent_color_penalty", type=float, default=18.0)
 
     # Ball estimate/motion.
-    parser.add_argument("--max_missing_ball_frames", type=int, default=12)
-    parser.add_argument("--max_ball_speed_px_per_frame", type=float, default=120.0)
-    parser.add_argument("--max_estimated_control_gap", type=int, default=8)
+    parser.add_argument("--fps", type=float, default=25.0, help="FPS used to scale frame-count defaults. Default: 25.")
+    parser.add_argument("--max_missing_ball_frames", type=int, default=None, help="Max missing-ball gap in frames. Default scales old 12-frame/30fps value to --fps.")
+    parser.add_argument("--max_ball_speed_px_per_frame", type=float, default=None, help="Max estimated-ball speed in px/frame. Default scales old 120px/frame-at-30fps value to --fps.")
+    parser.add_argument("--max_estimated_control_gap", type=int, default=None, help="Frames of estimated ball allowed for control. Default scales old 8-frame/30fps value to --fps.")
 
     # Possession evidence.
     parser.add_argument("--expanded_box_ratio", type=float, default=0.35)
@@ -1556,25 +1700,28 @@ def main() -> None:
     parser.add_argument("--velocity_direction_bonus", type=float, default=15.0)
 
     # Pass/receiver.
-    parser.add_argument("--pass_speed_threshold", type=float, default=35.0, help="Fast ball is treated as pass/in transit.")
-    parser.add_argument("--pass_keep_previous_frames", type=int, default=16, help="Keep previous owner as CTX during pass.")
+    parser.add_argument("--pass_speed_threshold", type=float, default=None, help="Fast ball is treated as pass/in transit. Default scales old 35px/frame-at-30fps value to --fps.")
+    parser.add_argument("--pass_keep_previous_frames", type=int, default=None, help="Keep previous owner as CTX during pass. Default scales old 16-frame/30fps value to --fps.")
     parser.add_argument("--receive_distance", type=float, default=50.0, help="New receiver must be close to fast ball.")
     parser.add_argument("--receive_norm_distance", type=float, default=0.55)
     parser.add_argument("--receiver_score_margin", type=float, default=18.0)
-    parser.add_argument("--receiver_confirm_frames", type=int, default=15)
+    parser.add_argument("--receiver_confirm_frames", type=int, default=None, help="Receiver confirmation frames. Default scales old 15-frame/30fps value to --fps.")
 
     # Lower bound / stability.
-    parser.add_argument("--min_confirm_frames", type=int, default=10, help="Lower bound for possession confirmation, around 0.5s at 30fps.")
-    parser.add_argument("--max_empty_keep_frames", type=int, default=12)
-    parser.add_argument("--min_segment_frames", type=int, default=10, help="Exclude short one-touch/deflection segments.")
+    parser.add_argument("--min_confirm_frames", type=int, default=None, help="Lower bound for possession confirmation. Default scales old 10-frame/30fps value to --fps.")
+    parser.add_argument("--max_empty_keep_frames", type=int, default=None, help="Keep previous owner as CTX over short loose/uncertain gaps. Default scales old 12-frame/30fps value to --fps.")
+    parser.add_argument("--min_segment_frames", type=int, default=None, help="Exclude short one-touch/deflection segments. Default scales old 10-frame/30fps value to --fps.")
 
     # Segment/crop.
-    parser.add_argument("--pre_frames", type=int, default=10)
-    parser.add_argument("--post_frames", type=int, default=10)
+    parser.add_argument("--pre_frames", type=int, default=None, help="Frames before possession segment. Default scales old 10-frame/30fps value to --fps.")
+    parser.add_argument("--post_frames", type=int, default=None, help="Frames after possession segment. Default scales old 10-frame/30fps value to --fps.")
     parser.add_argument("--crop_pad_ratio", type=float, default=0.30)
-    parser.add_argument("--bridge_gap_frames", type=int, default=20, help="Merge same-owner controlled segments separated by small gaps.")
-
+    parser.add_argument("--square_crop_scale", type=float, default=1.30, help="1:1 crop side = this * longer side of tight player+ball box.")
+    parser.add_argument("--draw_legacy_crop_box", action="store_true", help="Draw old rectangular crop box in debug videos for comparison.")
+    parser.add_argument("--bridge_gap_frames", type=int, default=None, help="Merge same-owner controlled segments separated by small gaps. Default scales old 20-frame/30fps value to --fps.")
+   
     args = parser.parse_args()
+    args = fill_fps_scaled_defaults(args)
 
     frames_dir = Path(args.frames_dir)
     frames, metadata = read_frames(frames_dir)
@@ -1614,13 +1761,14 @@ def main() -> None:
     )
 
     segments = build_segments(
-        frames,
-        min_segment_frames=args.min_segment_frames,
-        pre_frames=args.pre_frames,
-        post_frames=args.post_frames,
-        crop_pad_ratio=args.crop_pad_ratio,
-        width=width,
-        height=height,
+    frames,
+    min_segment_frames=args.min_segment_frames,
+    pre_frames=args.pre_frames,
+    post_frames=args.post_frames,
+    crop_pad_ratio=args.crop_pad_ratio,
+    square_crop_scale=args.square_crop_scale,
+    width=width,
+    height=height,
     )
 
     segments = merge_same_owner_segments(
@@ -1697,7 +1845,7 @@ def main() -> None:
                 segments=segments,
                 debug_vid_dir=debug_vid_dir,
                 prefix=prefix,
-                fps=float(metadata.get("fps", 30.0)),
+                fps=float(metadata.get("fps", args.fps)),
                 max_debug_videos=args.max_debug_videos,
                 make_full_debug_video=args.make_full_debug_video,
             )

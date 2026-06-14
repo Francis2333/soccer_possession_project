@@ -42,6 +42,7 @@ def main():
     parser.add_argument("--player_model", default="yolo26x.pt")
     parser.add_argument("--ball_model", default="yolo26x.pt")
     parser.add_argument("--device", default="0")
+    parser.add_argument("--fps", type=float, default=25.0, help="Pipeline FPS passed to Stage 1 and Stage 2. Default: 25.")
 
     parser.add_argument("--player_conf", default="0.10")
     parser.add_argument("--ball_conf", default="0.05")
@@ -53,6 +54,9 @@ def main():
     parser.add_argument("--make_full_debug_video", action="store_true")
 
     parser.add_argument("--use_shirt_color", action="store_true")
+
+    parser.add_argument("--square_crop_scale", type=float, default=1.30, help="Stage 2 active 1:1 crop side = this * max(width,height) of tight player+ball box. Default: 1.30.")
+    parser.add_argument("--draw_legacy_crop_box", action="store_true", help="Ask Stage 2 debug videos to also draw the old rectangular crop for comparison.")
 
     parser.add_argument("--skip_stage1", action="store_true")
     parser.add_argument("--skip_stage2", action="store_true")
@@ -99,6 +103,8 @@ def main():
                 args.ball_imgsz,
                 "--device",
                 args.device,
+                "--fps",
+                str(args.fps),
                 "--start_frame_number_at_one",
             ]
 
@@ -133,6 +139,10 @@ def main():
                 args.debug_vid_dir,
                 "--output_prefix",
                 prefix,
+                "--fps",
+                str(args.fps),
+                "--square_crop_scale",
+                str(args.square_crop_scale),
             ]
 
             # Usually not necessary if Stage 1 _metadata.json has the video path,
@@ -147,6 +157,9 @@ def main():
 
             if args.use_shirt_color:
                 stage2_cmd.append("--use_shirt_color")
+
+            if args.draw_legacy_crop_box:
+                stage2_cmd.append("--draw_legacy_crop_box")
 
             run_cmd(stage2_cmd)
 

@@ -244,7 +244,7 @@ def main() -> None:
     parser.add_argument("--ball_imgsz", type=int, default=1280)
 
     parser.add_argument("--device", default="0", help="Example: 0, cuda:0, cpu. Default lets Ultralytics choose.")
-    parser.add_argument("--tracker", default="bytetrack.yaml", help="bytetrack.yaml or botsort.yaml")
+    parser.add_argument("--tracker", default="botsort.yaml", help="bytetrack.yaml or botsort.yaml")
 
     parser.add_argument("--person_class_id", type=int, default=COCO_PERSON_CLASS)
     parser.add_argument("--person_class_name", default=None, help="Optional class name if custom model uses a different person/player class name.")
@@ -255,6 +255,7 @@ def main() -> None:
     parser.add_argument("--save_every_n_frames", type=int, default=1)
     parser.add_argument("--max_frames", type=int, default=None)
     parser.add_argument("--start_frame_number_at_one", action="store_true", help="Use frame_000001.json for video frame_idx=0.")
+    parser.add_argument("--fps", type=float, default=25.0, help="FPS used for output debug video and time_sec metadata. Default: 25. Use <=0 to read native video FPS.")
 
     args = parser.parse_args()
 
@@ -289,7 +290,8 @@ def main() -> None:
     if not cap.isOpened():
         raise FileNotFoundError(f"Could not open video: {video_path}")
 
-    fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+    native_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    fps = float(args.fps) if args.fps and args.fps > 0 else (native_fps or 25.0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -297,6 +299,7 @@ def main() -> None:
     metadata = {
         "video": str(video_path),
         "fps": fps,
+        "native_fps": native_fps,
         "width": width,
         "height": height,
         "total_frames_reported": total_frames,

@@ -203,6 +203,7 @@ def make_video(
     summary_json=None,
     panel_width=760,
     draw_ball_on_original=True,
+    fps=25.0,
 ):
     video_path = Path(video_path)
     csv_path = Path(csv_path)
@@ -220,9 +221,8 @@ def make_video(
     if not cap.isOpened():
         raise RuntimeError(f"Could not open video: {video_path}")
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps <= 0:
-        fps = 30.0
+    native_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    fps = float(fps) if fps and fps > 0 else (native_fps or 25.0)
 
     original_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     original_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -297,7 +297,8 @@ def make_video(
     print(f"Video frames read: {frame_idx}")
     print(f"CSV rows: {len(rows_by_frame)}")
     print(f"Original video reported frames: {total_video_frames}")
-    print(f"FPS: {fps}")
+    print(f"FPS used: {fps}")
+    print(f"Native FPS: {native_fps}")
     print(f"Output size: {out_w}x{out_h}")
 
 
@@ -317,6 +318,7 @@ def main():
     parser.add_argument("--summary_json", default=None)
     parser.add_argument("--panel_width", type=int, default=760)
     parser.add_argument("--no_ball_dot", action="store_true")
+    parser.add_argument("--fps", type=float, default=25.0, help="FPS used for the output debug video. Default: 25. Use <=0 to read native video FPS.")
 
     args = parser.parse_args()
 
@@ -328,6 +330,7 @@ def main():
         summary_json=args.summary_json,
         panel_width=args.panel_width,
         draw_ball_on_original=not args.no_ball_dot,
+        fps=args.fps,
     )
 
 
